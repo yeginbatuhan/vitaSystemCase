@@ -1,0 +1,212 @@
+{
+  "info": {
+    "name": "Vita Systems - Backend Case",
+    "description": "Laravel + JWT + Spatie Data + Scramble. Login isteği token'ı otomatik olarak collection değişkenine kaydeder.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000/api" },
+    { "key": "token", "value": "" },
+    { "key": "product_uuid", "value": "" },
+    { "key": "product_uuid_2", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@doe.com\",\n  \"password\": \"vita123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Search Products",
+          "description": "name/code üzerinde kısmi arama. search en az 3 karakter olmalı (kısaysa 422 döner). per_page ile sayfalama yapılabilir (varsayılan 15, max 100). İlk iki sonucun uuid'sini otomatik kaydeder.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.length > 0) {",
+                  "    pm.collectionVariables.set('product_uuid', json.data[0].uuid);",
+                  "    console.log('product_uuid kaydedildi: ' + json.data[0].uuid);",
+                  "}",
+                  "if (json.data && json.data.length > 1) {",
+                  "    pm.collectionVariables.set('product_uuid_2', json.data[1].uuid);",
+                  "    console.log('product_uuid_2 kaydedildi: ' + json.data[1].uuid);",
+                  "} else if (json.data && json.data.length > 0) {",
+                  "    pm.collectionVariables.set('product_uuid_2', json.data[0].uuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/products?search=lc1d",
+              "host": ["{{base_url}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "search", "value": "lc1d", "description": "En az 3 karakter. name ve code kolonlarında aranır." },
+                { "key": "per_page", "value": "15", "disabled": true, "description": "Opsiyonel: sayfa başına sonuç (1-100, varsayılan 15)." }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+          {
+          "name": "Create Order",
+          "description": "Sipariş oluşturur (201). products dizisi zorunlu (en az 1 satır). Her satır: product_uuid (var olan ürün), quantity (min 1), discount (0-100). price sunucuda products.price'tan alınır, total_price = price*(1-discount/100)*quantity. Değişkenler boşsa pre-request script otomatik login + arama yapar.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const base = pm.collectionVariables.get('base_url');",
+                  "",
+                  "const ensureProducts = function (done) {",
+                  "    if (pm.collectionVariables.get('product_uuid')) { return done(); }",
+                  "    pm.sendRequest({",
+                  "        url: base + '/products?search=lc1d',",
+                  "        method: 'GET',",
+                  "        header: {",
+                  "            'Accept': 'application/json',",
+                  "            'Authorization': 'Bearer ' + pm.collectionVariables.get('token')",
+                  "        }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200) {",
+                  "            const data = res.json().data || [];",
+                  "            if (data.length > 0) {",
+                  "                pm.collectionVariables.set('product_uuid', data[0].uuid);",
+                  "                pm.collectionVariables.set('product_uuid_2', data.length > 1 ? data[1].uuid : data[0].uuid);",
+                  "            }",
+                  "        }",
+                  "        done();",
+                  "    });",
+                  "};",
+                  "",
+                  "if (!pm.collectionVariables.get('token')) {",
+                  "    pm.sendRequest({",
+                  "        url: base + '/auth/login',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json', 'Accept': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ email: 'john@doe.com', password: 'vita123' }) }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200) { pm.collectionVariables.set('token', res.json().token); }",
+                  "        ensureProducts(function () {});",
+                  "    });",
+                  "} else {",
+                  "    ensureProducts(function () {});",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"products\": [\n    {\n      \"product_uuid\": \"{{product_uuid}}\",\n      \"quantity\": 2,\n      \"discount\": 10\n    },\n    {\n      \"product_uuid\": \"{{product_uuid_2}}\",\n      \"quantity\": 1,\n      \"discount\": 0\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/orders",
+              "host": ["{{base_url}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "List Orders",
+          "description": "Giriş yapan kullanıcının siparişleri. per_page ile sayfalama yapılabilir (varsayılan 15, max 100).",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/orders",
+              "host": ["{{base_url}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "per_page", "value": "15", "disabled": true, "description": "Opsiyonel: sayfa başına sipariş (1-100, varsayılan 15)." }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
